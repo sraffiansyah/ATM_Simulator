@@ -31,10 +31,7 @@ def fmt_rp(amount: int) -> str:
     return f"Rp{amount:,.0f}".replace(",", ".")
 
 def input_pilihan(opsi, reprint_fn=None) -> str:
-    """
-    Loop input sampai pilihan valid.
-    reprint_fn = fungsi untuk reprint layar saat input salah (opsional).
-    """
+    """Loop input sampai pilihan valid. Clear + reprint tiap salah."""
     while True:
         pilihan = input("  Pilih: ").strip()
         if pilihan in opsi:
@@ -60,8 +57,8 @@ def menu_utama(atm: ATM):
         _reprint()
         pilihan = input_pilihan({"1", "2", "0"}, reprint_fn=_reprint)
 
-        if pilihan == "1":      menu_login(atm)
-        elif pilihan == "2":    aksi_scan_saldo(atm)
+        if pilihan == "1":   menu_login(atm)
+        elif pilihan == "2": aksi_scan_saldo(atm)
         elif pilihan == "0":
             clear()
             print("\n  Terima kasih. Sampai jumpa!\n")
@@ -92,10 +89,17 @@ def menu_dashboard(atm: ATM):
     def _reprint():
         header("DASHBOARD")
         print(f"  Nama  : {atm.get_nama()}")
-        print(f"  Saldo : {fmt_rp(atm.get_saldo())}")
+        print(f"  Level : {atm.get_level()}")
+
+        # Tampilkan peringatan grace period jika aktif
+        info_downgrade = atm.get_downgrade_info()
+        if info_downgrade:
+            print(f"  ⚠  Peringatan: Level akan turun ke {info_downgrade['level_tujuan']}")
+            print(f"     dalam {info_downgrade['sisa_hari']} hari jika saldo tidak mencukupi.")
+
         divider()
         print("  1. Tarik Uang")
-        print("  2. Setor Uang")
+        print("  2. Cek Saldo")
         print("  3. Transfer")
         print("  4. Riwayat Transaksi")
         print("  0. Logout")
@@ -108,7 +112,7 @@ def menu_dashboard(atm: ATM):
 
         match pilihan:
             case "1": aksi_tarik(atm)
-            case "2": aksi_setor(atm)
+            case "2": aksi_cek_saldo(atm)
             case "3": aksi_transfer(atm)
             case "4": aksi_riwayat(atm)
             case "0":
@@ -120,34 +124,53 @@ def menu_dashboard(atm: ATM):
 
 # ─── Actions ──────────────────────────────────────────────────────────────────
 
-def aksi_tarik(atm: ATM):
+def aksi_cek_saldo(atm: ATM):
     clear()
-    header("TARIK UANG")
-    print(f"  Saldo saat ini: {fmt_rp(atm.get_saldo())}")
+    header("CEK SALDO")
     divider()
-    print("  Pilih pecahan:")
-    print("  1. Rp50.000")
-    print("  2. Rp100.000")
+    print(f"  Nama  : {atm.get_nama()}")
+    print(f"  Level : {atm.get_level()}")
+    print(f"  Saldo : {fmt_rp(atm.get_saldo())}")
     divider()
+    pause()
 
-    def _reprint_tarik():
+
+def aksi_tarik(atm: ATM):
+    info = atm.get_info_tarik()
+
+    def _reprint_pecahan():
         header("TARIK UANG")
-        print(f"  Saldo saat ini: {fmt_rp(atm.get_saldo())}")
+        divider()
+        print(f"  Level         : {info['level']}")
+        if info['maks'] is not None:
+            print(f"  Tarik bulan ini: {info['count']}x / {info['maks']}x")
+            sisa_free = max(0, info['free'] - info['count'])
+            print(f"  Sisa gratis   : {sisa_free}x")
+            if info['kena_admin']:
+                print(f"  Biaya admin   : {fmt_rp(info['biaya_admin'])}/tarik")
+        else:
+            print("  Tarik         : Unlimited & Gratis")
+        print(f"  Limit harian  : {fmt_rp(info['limit_harian'])}")
+        sisa_harian = info['limit_harian'] - info['sudah_harian']
+        print(f"  Sisa hari ini : {fmt_rp(sisa_harian)}")
         divider()
         print("  Pilih pecahan:")
         print("  1. Rp50.000")
         print("  2. Rp100.000")
         divider()
 
-    pilihan_pecahan = input_pilihan({"1", "2"}, reprint_fn=_reprint_tarik)
+    clear()
+    _reprint_pecahan()
+    pilihan_pecahan = input_pilihan({"1", "2"}, reprint_fn=_reprint_pecahan)
     pecahan = 50_000 if pilihan_pecahan == "1" else 100_000
 
     def _reprint_jumlah():
         header("TARIK UANG")
-        print(f"  Saldo saat ini: {fmt_rp(atm.get_saldo())}")
-        print(f"  Pecahan       : Rp{pecahan:,.0f}")
+        print(f"  Pecahan       : {fmt_rp(pecahan)}")
+        if info['kena_admin']:
+            print(f"  Biaya admin   : {fmt_rp(info['biaya_admin'])}/tarik")
         divider()
-        print(f"  Masukkan kelipatan Rp{pecahan:,.0f}")
+        print(f"  Masukkan kelipatan {fmt_rp(pecahan)}")
         divider()
 
     clear()
@@ -165,48 +188,16 @@ def aksi_tarik(atm: ATM):
         ok, pesan = atm.tarik(jumlah, pecahan)
         if ok:
             print(f"\n  ✓ {pesan}")
-            print(f"  Saldo sekarang: {fmt_rp(atm.get_saldo())}")
             pause()
             break
         else:
             clear()
             _reprint_jumlah()
-            print(f"  {pesan}")
-
-
-def aksi_setor(atm: ATM):
-    def _reprint():
-        header("SETOR UANG")
-        print(f"  Saldo saat ini: {fmt_rp(atm.get_saldo())}")
-        print("  (Kelipatan Rp50.000)")
-        divider()
-
-    clear()
-    _reprint()
-
-    while True:
-        try:
-            jumlah = int(input("  Jumlah setor : Rp").replace(".", "").strip())
-        except ValueError:
-            clear()
-            _reprint()
-            print("  Pilihlah sesuai Pilihan")
-            continue
-
-        ok, pesan = atm.setor(jumlah)
-        if ok:
-            print(f"\n  ✓ {pesan}")
-            print(f"  Saldo sekarang: {fmt_rp(atm.get_saldo())}")
-            pause()
-            break
-        else:
-            clear()
-            _reprint()
-            print(f"  {pesan}")
+            print(f"  ✗ {pesan}")
 
 
 def aksi_transfer(atm: ATM):
-    W = 42  # lebar konten dalam box (di luar "  │ " dan " │")
+    W = 42
 
     def _box_line(label: str, value: str) -> str:
         content = f"  {label}: {value}"
@@ -214,18 +205,19 @@ def aksi_transfer(atm: ATM):
 
     def _reprint_norek():
         header("TRANSFER")
-        print(f"  Saldo saat ini: {fmt_rp(atm.get_saldo())}")
+        cfg = atm.get_level_config()
+        print(f"  Level         : {atm.get_level()}")
+        print(f"  Limit harian  : {fmt_rp(cfg['limit_transfer_harian'])}")
         divider()
 
     def _reprint_jumlah(nama_tujuan, no_tujuan):
         header("TRANSFER")
-        print(f"  Saldo saat ini   : {fmt_rp(atm.get_saldo())}")
         print(f"  No. Rek Tujuan   : {no_tujuan}")
         print(f"  Nama Penerima    : {nama_tujuan}")
         print("  (Minimal Rp10.000)")
         divider()
 
-    # ── Input no. rekening tujuan (loop sampai valid) ──
+    # ── Input no. rekening tujuan ──
     clear()
     _reprint_norek()
     while True:
@@ -243,7 +235,7 @@ def aksi_transfer(atm: ATM):
 
     nama_tujuan = atm.get_nama(no_tujuan)
 
-    # ── Input jumlah (loop sampai valid) ──
+    # ── Input jumlah ──
     clear()
     _reprint_jumlah(nama_tujuan, no_tujuan)
     while True:
@@ -269,7 +261,7 @@ def aksi_transfer(atm: ATM):
 
         break
 
-    # ── Konfirmasi (loop sampai y/n, clear tiap salah) ──
+    # ── Konfirmasi ──
     def _reprint_konfirmasi():
         header("TRANSFER")
         print()
@@ -293,8 +285,6 @@ def aksi_transfer(atm: ATM):
 
     ok, pesan = atm.transfer(no_tujuan, jumlah)
     print(f"\n  {'✓' if ok else '✗'} {pesan}")
-    if ok:
-        print(f"  Saldo sekarang: {fmt_rp(atm.get_saldo())}")
     pause()
 
 

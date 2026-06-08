@@ -1,23 +1,77 @@
 {
-    "1234567890": {
-        "name": "Budi Santoso",
-        "pin": "123456",
-        "balance": 5000000,
-        "card_number": "1234567890123456",
-        "history": []
-    },
-    "987654321": {
-        "name": "Siti Rahayu",
+    "15250408": {
+        "name": "Syukron Raffiansyah",
         "pin": "654321",
-        "balance": 12500000,
-        "card_number": "4123456789012345",
+        "balance": 829000000,
+        "card_number": "1525040815250408",
+        "level": "Priority",
+        "withdraw_count": 0,
+        "last_reset_month": "",
+        "tarik_harian": 0,
+        "last_tarik_date": "",
+        "transfer_harian": 0,
+        "last_transfer_date": "",
+        "downgrade_warning_date": null,
         "history": []
     },
-    "112233445": {
-        "name": "Andi Wijaya",
-        "pin": "001122",
-        "balance": 3750000,
-        "card_number": "5234567890123456",
+    "15250261": {
+        "name": "Aditya Romadhoni",
+        "pin": "123456",
+        "balance": 500950000,
+        "card_number": "1525026115250261",
+        "level": "Priority",
+        "withdraw_count": 0,
+        "last_reset_month": "",
+        "tarik_harian": 0,
+        "last_tarik_date": "",
+        "transfer_harian": 0,
+        "last_transfer_date": "",
+        "downgrade_warning_date": null,
+        "history": []
+    },
+    "15250610": {
+        "name": "Ahmad Ridho Aryaguna",
+        "pin": "123456",
+        "balance": 500000000,
+        "card_number": "1525061015250610",
+        "level": "Priority",
+        "withdraw_count": 0,
+        "last_reset_month": "",
+        "tarik_harian": 0,
+        "last_tarik_date": "",
+        "transfer_harian": 0,
+        "last_transfer_date": "",
+        "downgrade_warning_date": null,
+        "history": []
+    },
+    "15250510": {
+        "name": "Sayyid Ja'far Shodiq",
+        "pin": "123456",
+        "balance": 515000000,
+        "card_number": "1525051015250510",
+        "level": "Priority",
+        "withdraw_count": 0,
+        "last_reset_month": "",
+        "tarik_harian": 0,
+        "last_tarik_date": "",
+        "transfer_harian": 0,
+        "last_transfer_date": "",
+        "downgrade_warning_date": null,
+        "history": []
+    },
+    "15250571": {
+        "name": "Yasmine Sheilana Syahida",
+        "pin": "123456",
+        "balance": 500000000,
+        "card_number": "1525057115250571",
+        "level": "Priority",
+        "withdraw_count": 0,
+        "last_reset_month": "",
+        "tarik_harian": 0,
+        "last_tarik_date": "",
+        "transfer_harian": 0,
+        "last_transfer_date": "",
+        "downgrade_warning_date": null,
         "history": []
     }
 }
