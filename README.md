@@ -1,6 +1,3 @@
-Siap! Ini `README.md` lengkap **full English** yang udah gw sesuaikan sama fitur terbaru di kode Python lu. Tinggal **copy-paste** aja ke repo ATM Simulator lu! 🔥
-
-```markdown
 # 🏧 ATM Simulator
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python)](#)
@@ -229,5 +226,3 @@ Distributed under the **MIT License**. See `LICENSE` for details.
   git commit -m "docs: update README with full English setup guide & advanced features"
   git push origin main
   ```
-
-GAS! 🔥💻
