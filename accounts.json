@@ -2,16 +2,15 @@
     "15250408": {
         "name": "Syukron Raffiansyah",
         "pin": "654321",
-        "balance": 829000000,
+        "balance": 823100000,
         "card_number": "1525040815250408",
         "level": "Priority",
-        "withdraw_count": 0,
-        "last_reset_month": "",
-        "tarik_harian": 0,
-        "last_tarik_date": "",
-        "transfer_harian": 0,
-        "last_transfer_date": "",
-        "downgrade_warning_date": null,
+        "withdraw_count": 5,
+        "last_reset_month": "2026-06",
+        "tarik_harian": 1900000,
+        "last_tarik_date": "2026-06-14",
+        "transfer_harian": 700000,
+        "last_transfer_date": "2026-06-14",
         "history": []
     },
     "15250261": {
@@ -32,7 +31,7 @@
     "15250610": {
         "name": "Ahmad Ridho Aryaguna",
         "pin": "123456",
-        "balance": 500000000,
+        "balance": 500700000,
         "card_number": "1525061015250610",
         "level": "Priority",
         "withdraw_count": 0,

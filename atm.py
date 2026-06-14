@@ -5,7 +5,7 @@ History transaksi disimpan ke JSON supaya persist setelah program ditutup.
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 DATA_FILE = Path(__file__).parent / "accounts.json"
@@ -15,33 +15,39 @@ DATA_FILE = Path(__file__).parent / "accounts.json"
 
 LEVEL_CONFIG = {
     "Silver": {
-        "limit_tarik_harian":    2_000_000,
+        "limit_tarik_harian":    5_000_000,
         "limit_transfer_harian": 5_000_000,
         "maks_tarik_bulanan":    10,
         "free_tarik":            3,
         "biaya_admin":           6_500,
     },
     "Gold": {
-        "limit_tarik_harian":    5_000_000,
+        "limit_tarik_harian":    7_000_000,
         "limit_transfer_harian": 15_000_000,
         "maks_tarik_bulanan":    15,
         "free_tarik":            5,
         "biaya_admin":           5_000,
     },
     "Platinum": {
-        "limit_tarik_harian":    15_000_000,
+        "limit_tarik_harian":    10_000_000,
         "limit_transfer_harian": 50_000_000,
         "maks_tarik_bulanan":    20,
         "free_tarik":            10,
         "biaya_admin":           2_500,
     },
     "Priority": {
-        "limit_tarik_harian":    50_000_000,
+        "limit_tarik_harian":    15_000_000,
         "limit_transfer_harian": 100_000_000,
         "maks_tarik_bulanan":    None,   # unlimited
         "free_tarik":            None,   # semua free
         "biaya_admin":           0,
     },
+}
+
+# Batas maksimal sekali tarik per jenis pecahan (berlaku semua level)
+MAKS_TARIK_PER_TRANSAKSI = {
+    50_000:  1_000_000,   # pecahan 50k → maks Rp1.000.000 per tarik
+    100_000: 2_000_000,   # pecahan 100k → maks Rp2.000.000 per tarik
 }
 
 # Threshold saldo untuk level (batas bawah)
@@ -94,23 +100,26 @@ class ATM:
         acc = self.accounts[no_rek]
         changed = False
         defaults = {
-            "level":                  "Silver",
-            "withdraw_count":         0,
-            "last_reset_month":       "",
-            "tarik_harian":           0,
-            "last_tarik_date":        "",
-            "transfer_harian":        0,
-            "last_transfer_date":     "",
-            "downgrade_warning_date": None,
+            "level":              "Silver",
+            "withdraw_count":     0,
+            "last_reset_month":   "",
+            "tarik_harian":       0,
+            "last_tarik_date":    "",
+            "transfer_harian":    0,
+            "last_transfer_date": "",
         }
         for key, val in defaults.items():
             if key not in acc:
                 acc[key] = val
                 changed = True
+        # Hapus field grace period lama jika masih ada
+        if "downgrade_warning_date" in acc:
+            del acc["downgrade_warning_date"]
+            changed = True
         if changed:
             self._save_accounts()
 
-    # ── Auto-Leveling (Dynamic Tiering + Grace Period) ────────────────────────
+    # ── Auto-Leveling Realtime (tanpa grace period) ───────────────────────────
 
     def _level_sesuai_saldo(self, saldo: int) -> str:
         """Tentukan level yang sesuai berdasarkan saldo saat ini."""
@@ -120,79 +129,22 @@ class ATM:
                 level = lv
         return level
 
-    def _check_and_update_level(self, no_rek: str):
+    def _check_and_update_level(self, no_rek: str) -> str | None:
         """
-        Periksa dan perbarui level rekening berdasarkan saldo.
-        - Naik level: instan.
-        - Turun level: grace period 10 hari.
-        Dipanggil saat login dan setiap transaksi yang mengurangi saldo.
+        Periksa dan perbarui level rekening berdasarkan saldo secara realtime.
+        Naik maupun turun level sama-sama instan.
+        Mengembalikan pesan notifikasi jika level berubah, atau None jika tidak.
         """
-        acc    = self.accounts[no_rek]
-        saldo  = acc["balance"]
-        level_sekarang = acc.get("level", "Silver")
-        level_ideal    = self._level_sesuai_saldo(saldo)
+        acc            = self.accounts[no_rek]
+        level_lama     = acc.get("level", "Silver")
+        level_baru     = self._level_sesuai_saldo(acc["balance"])
 
-        idx_sekarang = LEVEL_ORDER.index(level_sekarang)
-        idx_ideal    = LEVEL_ORDER.index(level_ideal)
-
-        hari_ini      = datetime.now().date()
-        warning_str   = acc.get("downgrade_warning_date")
-        warning_date  = datetime.strptime(warning_str, "%Y-%m-%d").date() if warning_str else None
-
-        changed = False
-
-        if idx_ideal > idx_sekarang:
-            # ── Naik level: instan ──
-            acc["level"]                  = level_ideal
-            acc["downgrade_warning_date"] = None
-            changed = True
-
-        elif idx_ideal < idx_sekarang:
-            # ── Saldo turun di bawah threshold level saat ini ──
-            if warning_date is None:
-                # Pertama kali turun: catat grace period (10 hari ke depan)
-                deadline = hari_ini + timedelta(days=10)
-                acc["downgrade_warning_date"] = deadline.strftime("%Y-%m-%d")
-                changed = True
-            else:
-                # Sudah ada warning — cek apakah sudah lewat grace period
-                if hari_ini >= warning_date:
-                    # Grace period habis: turunkan level
-                    acc["level"]                  = level_ideal
-                    acc["downgrade_warning_date"] = None
-                    changed = True
-                # Jika belum lewat: biarkan level & warning_date tetap
-
-        else:
-            # ── Level sudah sesuai saldo ──
-            if warning_date is not None:
-                # Saldo sudah naik kembali → hapus warning
-                acc["downgrade_warning_date"] = None
-                changed = True
-
-        if changed:
+        if level_baru != level_lama:
+            acc["level"] = level_baru
             self._save_accounts()
-
-    def get_downgrade_info(self) -> dict | None:
-        """
-        Kembalikan info grace period jika sedang aktif, atau None.
-        Berguna untuk ditampilkan di dashboard.
-        """
-        if not self.logged_in:
-            return None
-        acc         = self.accounts[self.logged_in]
-        warning_str = acc.get("downgrade_warning_date")
-        if not warning_str:
-            return None
-        warning_date  = datetime.strptime(warning_str, "%Y-%m-%d").date()
-        hari_ini      = datetime.now().date()
-        sisa_hari     = (warning_date - hari_ini).days
-        level_tujuan  = self._level_sesuai_saldo(acc["balance"])
-        return {
-            "warning_date": warning_str,
-            "sisa_hari":    max(0, sisa_hari),
-            "level_tujuan": level_tujuan,
-        }
+            arah = "naik" if LEVEL_ORDER.index(level_baru) > LEVEL_ORDER.index(level_lama) else "turun"
+            return f"Level rekening {arah} dari {level_lama} → {level_baru}."
+        return None
 
     # ── Reset Tracker ─────────────────────────────────────────────────────────
 
@@ -234,6 +186,31 @@ class ATM:
         level = self.accounts.get(key, {}).get("level", "Silver")
         return LEVEL_CONFIG.get(level, LEVEL_CONFIG["Silver"])
 
+    @staticmethod
+    def deteksi_pecahan(jumlah: int):
+        """
+        Auto-deteksi pecahan berdasarkan nominal.
+        Return value:
+        50_000   → pasti pecahan 50k (ada komponen 50k, misal 50k/150k/250k/...)
+        100_000  → pasti pecahan 100k (nominal > 1jt, kelipatan 100k)
+        "tanya"  → nominal kelipatan 100k DAN <= 1jt → bisa dua-duanya, tanya user
+        None     → tidak valid (bukan kelipatan 50k, atau > 1jt tapi tidak kelipatan 100k)
+        """
+        if jumlah <= 0:
+            return None
+        if jumlah % 50_000 != 0:
+            return None
+        # Nominal > 1jt → wajib kelipatan 100k, pakai pecahan 100k
+        if jumlah > 1_000_000:
+            if jumlah % 100_000 != 0:
+                return None  # Ada komponen 50k tapi melebihi maks pecahan 50k
+            return 100_000
+        # Nominal <= 1jt, ada komponen 50k (bukan kelipatan 100k) → pasti 50k
+        if jumlah % 100_000 != 0:
+            return 50_000
+        # Nominal <= 1jt dan kelipatan bersih 100k → dua pecahan sama-sama bisa
+        return "tanya"
+
     # ── Lookup ───────────────────────────────────────────────────────────────
 
     def find_by_card(self, no_kartu: str) -> str | None:
@@ -257,7 +234,7 @@ class ATM:
         if self.accounts[no_rek]["pin"] != pin:
             return False, "PIN salah."
         self._ensure_fields(no_rek)
-        self._check_and_update_level(no_rek)   # ← cek level saat login
+        self._check_and_update_level(no_rek)
         self.logged_in = no_rek
         saved = self.accounts[no_rek].get("history", [])
         self.history = Stack(saved)
@@ -311,15 +288,27 @@ class ATM:
 
     # ── Transactions ─────────────────────────────────────────────────────────
 
-    def tarik(self, jumlah: int, pecahan: int) -> tuple[bool, str]:
+    def tarik(self, jumlah: int, pecahan: int) -> tuple[bool, str, str | None]:
+        """
+        Kembalikan (ok, pesan, notif_level).
+        notif_level berisi pesan perubahan level jika ada, atau None.
+        """
         if not self.logged_in:
-            return False, "Belum login."
+            return False, "Belum login.", None
         if pecahan not in (50_000, 100_000):
-            return False, "Pecahan tidak valid."
+            return False, "Pecahan tidak valid.", None
         if jumlah <= 0:
-            return False, "Jumlah harus lebih dari 0."
+            return False, "Jumlah harus lebih dari 0.", None
         if jumlah % pecahan != 0:
-            return False, f"Jumlah harus kelipatan Rp{pecahan:,.0f}."
+            return False, f"Jumlah harus kelipatan {fmt_rp(pecahan)}.", None
+
+        # Validasi batas per-transaksi berdasarkan pecahan
+        maks_per_tx = MAKS_TARIK_PER_TRANSAKSI[pecahan]
+        if jumlah > maks_per_tx:
+            return False, (
+                f"Maksimal sekali tarik pecahan {fmt_rp(pecahan)} "
+                f"adalah {fmt_rp(maks_per_tx)}."
+            ), None
 
         no_rek = self.logged_in
         self._reset_monthly_if_needed(no_rek)
@@ -334,7 +323,7 @@ class ATM:
                 return False, (
                     f"Batas tarik bulanan ({cfg['maks_tarik_bulanan']}x) "
                     f"sudah tercapai."
-                )
+                ), None
 
         # Hitung biaya admin
         biaya_admin = 0
@@ -348,52 +337,54 @@ class ATM:
             sisa = cfg["limit_tarik_harian"] - acc["tarik_harian"]
             return False, (
                 f"Melebihi limit tarik harian. "
-                f"Sisa limit hari ini: Rp{sisa:,.0f}."
-            )
+                f"Sisa limit hari ini: {fmt_rp(sisa)}."
+            ), None
 
         # Cek saldo (jumlah + admin)
         if total_debit > acc["balance"]:
             if biaya_admin > 0:
                 return False, (
                     f"Saldo tidak mencukupi. "
-                    f"Dibutuhkan Rp{total_debit:,.0f} "
-                    f"(termasuk admin Rp{biaya_admin:,.0f})."
-                )
-            return False, "Saldo tidak mencukupi."
+                    f"Dibutuhkan {fmt_rp(total_debit)} "
+                    f"(termasuk admin {fmt_rp(biaya_admin)})."
+                ), None
+            return False, "Saldo tidak mencukupi.", None
 
         # Eksekusi
-        lembar               = jumlah // pecahan
-        acc["balance"]      -= total_debit
-        acc["tarik_harian"] += jumlah
+        lembar                = jumlah // pecahan
+        acc["balance"]       -= total_debit
+        acc["tarik_harian"]  += jumlah
         acc["withdraw_count"] += 1
 
-        keterangan = (
-            f"TARIK  Rp{jumlah:,.0f}  ({lembar} lembar @Rp{pecahan:,.0f})"
-        )
+        keterangan = f"TARIK  {fmt_rp(jumlah)}  ({lembar} lembar @{fmt_rp(pecahan)})"
         if biaya_admin > 0:
-            keterangan += f"  | Admin: Rp{biaya_admin:,.0f}"
-        keterangan += f"  | Sisa: Rp{acc['balance']:,.0f}"
+            keterangan += f"  | Admin: {fmt_rp(biaya_admin)}"
+        keterangan += f"  | Sisa: {fmt_rp(acc['balance'])}"
 
         self._record(keterangan)
         self._save_accounts()
 
-        # ← Cek level setelah tarik (saldo berkurang)
-        self._check_and_update_level(no_rek)
+        # Cek level realtime setelah saldo berkurang
+        notif_level = self._check_and_update_level(no_rek)
 
-        pesan = f"Berhasil tarik Rp{jumlah:,.0f} ({lembar} lembar @Rp{pecahan:,.0f})."
+        pesan = f"Berhasil tarik {fmt_rp(jumlah)} ({lembar} lembar @{fmt_rp(pecahan)})."
         if biaya_admin > 0:
-            pesan += f"\n  Biaya admin: Rp{biaya_admin:,.0f}."
-        return True, pesan
+            pesan += f"\n  Biaya admin: {fmt_rp(biaya_admin)}."
+        return True, pesan, notif_level
 
-    def transfer(self, no_rek_tujuan: str, jumlah: int) -> tuple[bool, str]:
+    def transfer(self, no_rek_tujuan: str, jumlah: int) -> tuple[bool, str, str | None]:
+        """
+        Kembalikan (ok, pesan, notif_level).
+        notif_level berisi pesan perubahan level jika ada, atau None.
+        """
         if not self.logged_in:
-            return False, "Belum login."
+            return False, "Belum login.", None
         if no_rek_tujuan == self.logged_in:
-            return False, "Tidak bisa transfer ke rekening sendiri."
+            return False, "Tidak bisa transfer ke rekening sendiri.", None
         if no_rek_tujuan not in self.accounts:
-            return False, "Nomor rekening tujuan tidak ditemukan."
+            return False, "Nomor rekening tujuan tidak ditemukan.", None
         if jumlah < 10_000:
-            return False, "Jumlah minimal transfer Rp10.000."
+            return False, "Jumlah minimal transfer Rp10.000.", None
 
         no_rek = self.logged_in
         self._reset_daily_transfer_if_needed(no_rek)
@@ -406,37 +397,37 @@ class ATM:
             sisa = cfg["limit_transfer_harian"] - acc["transfer_harian"]
             return False, (
                 f"Melebihi limit transfer harian. "
-                f"Sisa limit hari ini: Rp{sisa:,.0f}."
-            )
+                f"Sisa limit hari ini: {fmt_rp(sisa)}."
+            ), None
 
         if jumlah > acc["balance"]:
-            return False, "Saldo tidak mencukupi."
+            return False, "Saldo tidak mencukupi.", None
 
-        nama_tujuan                             = self.accounts[no_rek_tujuan]["name"]
-        acc["balance"]                         -= jumlah
+        nama_tujuan                              = self.accounts[no_rek_tujuan]["name"]
+        acc["balance"]                          -= jumlah
         self.accounts[no_rek_tujuan]["balance"] += jumlah
-        acc["transfer_harian"]                 += jumlah
+        acc["transfer_harian"]                  += jumlah
 
         self._record(
-            f"TRANSFER  Rp{jumlah:,.0f}  → {nama_tujuan} ({no_rek_tujuan})"
-            f"  | Sisa: Rp{acc['balance']:,.0f}"
+            f"TRANSFER  {fmt_rp(jumlah)}  → {nama_tujuan} ({no_rek_tujuan})"
+            f"  | Sisa: {fmt_rp(acc['balance'])}"
         )
 
         waktu = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
         entry_masuk = {
             "waktu": waktu,
             "keterangan": (
-                f"MASUK    Rp{jumlah:,.0f}  ← {self.get_nama()} ({self.logged_in})"
-                f"  | Saldo: Rp{self.accounts[no_rek_tujuan]['balance']:,.0f}"
+                f"MASUK    {fmt_rp(jumlah)}  ← {self.get_nama()} ({self.logged_in})"
+                f"  | Saldo: {fmt_rp(self.accounts[no_rek_tujuan]['balance'])}"
             )
         }
         self.accounts[no_rek_tujuan].setdefault("history", []).append(entry_masuk)
         self._save_accounts()
 
-        # ← Cek level setelah transfer (saldo berkurang)
-        self._check_and_update_level(no_rek)
+        # Cek level realtime setelah saldo berkurang
+        notif_level = self._check_and_update_level(no_rek)
 
-        return True, f"Transfer Rp{jumlah:,.0f} ke {nama_tujuan} berhasil."
+        return True, f"Transfer {fmt_rp(jumlah)} ke {nama_tujuan} berhasil.", notif_level
 
     # ── History (Stack + JSON) ────────────────────────────────────────────────
 
@@ -450,3 +441,9 @@ class ATM:
 
     def get_history(self) -> list[dict]:
         return self.history.to_list()
+
+
+# ── Helper format (dipakai internal atm.py juga) ──────────────────────────────
+
+def fmt_rp(amount: int) -> str:
+    return f"Rp{amount:,.0f}".replace(",", ".")

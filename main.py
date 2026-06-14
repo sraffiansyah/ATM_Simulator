@@ -8,7 +8,7 @@
 import os
 import sys
 from getpass import getpass
-from atm import ATM
+from atm import ATM, MAKS_TARIK_PER_TRANSAKSI
 
 
 # ─── UI Helpers ───────────────────────────────────────────────────────────────
@@ -90,13 +90,6 @@ def menu_dashboard(atm: ATM):
         header("DASHBOARD")
         print(f"  Nama  : {atm.get_nama()}")
         print(f"  Level : {atm.get_level()}")
-
-        # Tampilkan peringatan grace period jika aktif
-        info_downgrade = atm.get_downgrade_info()
-        if info_downgrade:
-            print(f"  ⚠  Peringatan: Level akan turun ke {info_downgrade['level_tujuan']}")
-            print(f"     dalam {info_downgrade['sisa_hari']} hari jika saldo tidak mencukupi.")
-
         divider()
         print("  1. Tarik Uang")
         print("  2. Cek Saldo")
@@ -138,7 +131,7 @@ def aksi_cek_saldo(atm: ATM):
 def aksi_tarik(atm: ATM):
     info = atm.get_info_tarik()
 
-    def _reprint_pecahan():
+    def _reprint_nominal():
         header("TARIK UANG")
         divider()
         print(f"  Level         : {info['level']}")
@@ -154,54 +147,72 @@ def aksi_tarik(atm: ATM):
         sisa_harian = info['limit_harian'] - info['sudah_harian']
         print(f"  Sisa hari ini : {fmt_rp(sisa_harian)}")
         divider()
-        print("  Pilih pecahan:")
-        print("  1. Rp50.000")
-        print("  2. Rp100.000")
+        print(f"  Pecahan 50rb  → maks {fmt_rp(MAKS_TARIK_PER_TRANSAKSI[50_000])}/tarik")
+        print(f"  Pecahan 100rb → maks {fmt_rp(MAKS_TARIK_PER_TRANSAKSI[100_000])}/tarik")
+        print("  (Pecahan otomatis dipilih dari nominal)")
         divider()
 
     clear()
-    _reprint_pecahan()
-    pilihan_pecahan = input_pilihan({"1", "2"}, reprint_fn=_reprint_pecahan)
-    pecahan = 50_000 if pilihan_pecahan == "1" else 100_000
-
-    def _reprint_jumlah():
-        header("TARIK UANG")
-        print(f"  Pecahan       : {fmt_rp(pecahan)}")
-        if info['kena_admin']:
-            print(f"  Biaya admin   : {fmt_rp(info['biaya_admin'])}/tarik")
-        divider()
-        print(f"  Masukkan kelipatan {fmt_rp(pecahan)}")
-        divider()
-
-    clear()
-    _reprint_jumlah()
+    _reprint_nominal()
 
     while True:
         try:
-            jumlah = int(input("  Jumlah tarik : Rp").replace(".", "").strip())
+            raw = input("  Jumlah tarik : Rp").replace(".", "").strip()
+            jumlah = int(raw)
         except ValueError:
             clear()
-            _reprint_jumlah()
-            print("  Pilihlah sesuai Pilihan")
+            _reprint_nominal()
+            print("  ✗ Input tidak valid. Masukkan angka.")
             continue
 
-        ok, pesan = atm.tarik(jumlah, pecahan)
+        if jumlah <= 0:
+            clear()
+            _reprint_nominal()
+            print("  ✗ Jumlah harus lebih dari 0.")
+            continue
+
+        # Auto-deteksi pecahan
+        hasil_deteksi = atm.deteksi_pecahan(jumlah)
+        if hasil_deteksi is None:
+            clear()
+            _reprint_nominal()
+            print(f"  ✗ Nominal harus kelipatan Rp50.000.")
+            print(f"    Jika > {fmt_rp(MAKS_TARIK_PER_TRANSAKSI[50_000])}, harus kelipatan Rp100.000.")
+            continue
+
+        # Jika nominal kelipatan 100k dan <= 1jt → tanya user
+        if hasil_deteksi == "tanya":
+            def _reprint_pilih_pecahan():
+                header("TARIK UANG")
+                print(f"  Nominal       : {fmt_rp(jumlah)}")
+                divider()
+                print("  Pilih pecahan:")
+                print("  1. Rp50.000")
+                print("  2. Rp100.000")
+                divider()
+
+            clear()
+            _reprint_pilih_pecahan()
+            p = input_pilihan({"1", "2"}, reprint_fn=_reprint_pilih_pecahan)
+            pecahan = 50_000 if p == "1" else 100_000
+        else:
+            pecahan = hasil_deteksi
+            print(f"  → Pecahan terdeteksi: {fmt_rp(pecahan)}")
+
+        ok, pesan, notif_level = atm.tarik(jumlah, pecahan)
         if ok:
             print(f"\n  ✓ {pesan}")
+            if notif_level:
+                print(f"\n  ★ {notif_level}")
             pause()
             break
         else:
             clear()
-            _reprint_jumlah()
+            _reprint_nominal()
             print(f"  ✗ {pesan}")
 
 
 def aksi_transfer(atm: ATM):
-    W = 42
-
-    def _box_line(label: str, value: str) -> str:
-        content = f"  {label}: {value}"
-        return f"  │{content:<{W}}│"
 
     def _reprint_norek():
         header("TRANSFER")
@@ -261,15 +272,35 @@ def aksi_transfer(atm: ATM):
 
         break
 
-    # ── Konfirmasi ──
+    # ── Konfirmasi: lebar kotak dinamis ──
+    LABEL_KE     = "  Ke    "
+    LABEL_JUMLAH = "  Jumlah"
+    VAL_KE       = f"{nama_tujuan} ({no_tujuan})"
+    VAL_JUMLAH   = fmt_rp(jumlah)
+    TITLE        = "Konfirmasi Transfer"
+
+    # Hitung lebar konten terpanjang di antara semua baris isi kotak
+    # Format konten: "  {label}: {value}  " (padding 2 di kiri, 2 di kanan)
+    MIN_W = 36
+    W = max(
+        MIN_W,
+        len(f"  {LABEL_KE}: {VAL_KE}") + 2,
+        len(f"  {LABEL_JUMLAH}: {VAL_JUMLAH}") + 2,
+        len(TITLE) + 4,
+    )
+
+    def _box_line(label: str, value: str) -> str:
+        content = f"  {label}: {value}"
+        return f"  │{content:<{W}}│"
+
     def _reprint_konfirmasi():
         header("TRANSFER")
         print()
         print(f"  ┌{'─' * W}┐")
-        print(f"  │{'  Konfirmasi Transfer':^{W}}│")
+        print(f"  │{('  ' + TITLE):^{W}}│")
         print(f"  ├{'─' * W}┤")
-        print(_box_line("  Ke    ", f"{nama_tujuan} ({no_tujuan})"))
-        print(_box_line("  Jumlah", fmt_rp(jumlah)))
+        print(_box_line(LABEL_KE, VAL_KE))
+        print(_box_line(LABEL_JUMLAH, VAL_JUMLAH))
         print(f"  └{'─' * W}┘")
         print()
         print("  Konfirmasi transfer (y = lanjutkan, n = batal)")
@@ -283,8 +314,10 @@ def aksi_transfer(atm: ATM):
         pause()
         return
 
-    ok, pesan = atm.transfer(no_tujuan, jumlah)
+    ok, pesan, notif_level = atm.transfer(no_tujuan, jumlah)
     print(f"\n  {'✓' if ok else '✗'} {pesan}")
+    if notif_level:
+        print(f"\n  ★ {notif_level}")
     pause()
 
 
