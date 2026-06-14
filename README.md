@@ -202,7 +202,6 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 
 > ⚠️ **Disclaimer:** This is a **simulation project for educational purposes only**. No real banking transactions are processed. All account data is locally stored and can be modified/deleted freely.
 
----
 
 <div align="center">
   <sub>Built with 💻 & 🐍 by <strong>Syukron Raffiansyah (Vyy)</strong> • 2026</sub>
