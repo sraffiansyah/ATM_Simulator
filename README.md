@@ -206,4 +206,3 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 <div align="center">
   <sub>Built with 💻 & 🐍 by <strong>Syukron Raffiansyah (Vyy)</strong> • 2026</sub>
 </div>
-```
