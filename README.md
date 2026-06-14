@@ -1,8 +1,7 @@
 # 🏧 ATM Simulator
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python)](#)
-[![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?style=for-the-badge&logo=opencv)](#)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](#)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
 > 💻 **Console-Based Banking Simulation** | Built with Python, OOP & Computer Vision  
 > 🔗 **Frontend Companion:** [ATM Card Designer (Web)](https://atm-generator-by-vyyy.netlify.app/)
