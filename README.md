@@ -208,20 +208,3 @@ Distributed under the **MIT License**. See `LICENSE` for details.
   <sub>Built with 💻 & 🐍 by <strong>Syukron Raffiansyah (Vyy)</strong> • 2026</sub>
 </div>
 ```
-
----
-
-### 🔧 Checklist Before Push:
-- [ ] If `requirements.txt` doesn't exist, create it with:
-  ```txt
-  opencv-python
-  pytesseract
-  numpy
-  ```
-- [ ] Update the link `atm-generator-by-vyyy.netlify.app` if your domain is different
-- [ ] Commit & push:
-  ```bash
-  git add README.md requirements.txt
-  git commit -m "docs: update README with full English setup guide & advanced features"
-  git push origin main
-  ```
