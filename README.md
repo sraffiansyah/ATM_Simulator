@@ -44,18 +44,13 @@ Built as a comprehensive coursework project focusing on **Data Structures (Stack
 
 ## 🚀 Installation & Setup
 
-### 1️⃣ Install Python (Required)
-- Download the official installer: https://www.python.org/downloads/
-- ⚠️ **IMPORTANT:** During installation, **check the box `Add Python to PATH`** at the bottom of the installer!
-- Verify installation in terminal/cmd:
-  ```bash
-  python --version
-  # or
-  python3 --version
-  ```
+### 1️⃣ Clone the Repository
+```bash
+git clone https://github.com/your-username/atm-simulator-core.git
+cd atm-simulator-core
+```
 
-### 2️⃣ Create Virtual Environment (Highly Recommended)
-Prevents library conflicts with other projects:
+### 2️⃣ Create Virtual Environment (Recommended)
 ```bash
 # Windows
 python -m venv venv
@@ -68,11 +63,15 @@ source venv/bin/activate
 *(When successful, `(venv)` will appear at the start of your terminal line)*
 
 ### 3️⃣ Install Python Dependencies
-Run this command in the activated `venv` terminal:
 ```bash
-pip install opencv-python pytesseract numpy
+pip install -r requirements.txt
 ```
-> 💡 **Tip:** If you encounter `permission denied` or `externally-managed-environment` errors, ensure your virtual environment is activated, or add the `--user` flag at the end of the command.
+> 💡 **requirements.txt** contains:
+> ```txt
+> opencv-python>=4.8.0
+> pytesseract>=0.3.10
+> numpy
+> ```
 
 ### 4️⃣ Install Tesseract OCR (Engine for Card Scanner)
 
@@ -85,7 +84,7 @@ pip install opencv-python pytesseract numpy
    - Right-click the `.exe` file → **Run as administrator**
    - Follow the installation wizard (Next → Next)
 
-3. **Select Additional Components (IMPORTANT!)**
+3. **Select Additional Components**
    - When the **"Choose Components"** page appears, check:
      - ✅ `Additional language data` → `English`
      - ✅ `Development headers` (optional, but recommended)
